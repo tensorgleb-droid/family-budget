@@ -8,8 +8,8 @@
 <style>
   :root { --bg:#f5f6f8; --panel:#fff; --text:#1d2330; --muted:#6b7280; --line:#e5e7eb; --accent:#2f6fed; --red:#d14343; --green:#1f9d55; }
   /* цвета 7 категорий: цвет закреплён за категорией, не за местом в рейтинге */
-  :root { --c1:#2a78d6; --c2:#eb6834; --c3:#1baf7a; --c4:#eda100; --c5:#e87ba4; --c6:#008300; --c7:#6250d6; --warn:#b26b00; }
-  @media (prefers-color-scheme: dark) { :root { --c1:#3987e5; --c2:#d95926; --c3:#199e70; --c4:#c98500; --c5:#d55181; --c6:#008300; --c7:#9085e9; --warn:#e0a030; } }
+  :root { --c1:#2a78d6; --c2:#eb6834; --c3:#1baf7a; --c4:#eda100; --c5:#e87ba4; --c6:#008300; --c7:#6250d6; --c8:#e34948; --c9:#8b8f97; --warn:#b26b00; }
+  @media (prefers-color-scheme: dark) { :root { --c1:#3987e5; --c2:#d95926; --c3:#199e70; --c4:#c98500; --c5:#d55181; --c6:#008300; --c7:#9085e9; --c8:#e66767; --c9:#9aa0a8; --warn:#e0a030; } }
   @media (prefers-color-scheme: dark) { :root { --bg:#14171c; --panel:#1d2128; --text:#e8eaee; --muted:#9aa3af; --line:#2c323b; --accent:#5b8cff; --red:#ff6b6b; --green:#3ecf7a; } }
   * { box-sizing: border-box; }
   [hidden] { display:none !important; }
@@ -103,6 +103,7 @@
   .over { color:var(--red); } .near { color:var(--warn); }
   .plan-actions { display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap; }
   @media (max-width:640px) { .plan .hide-sm { display:none; } .plan input { width:84px; } .plan td, .plan th { padding:8px 4px; font-size:13px; } .plan .meter { min-width:44px; } }
+  .row-actions { white-space:nowrap; text-align:right; } .row-actions button + button { margin-left:4px; }
   #tip { position:fixed; pointer-events:none; background:var(--text); color:var(--panel); font-size:13px; padding:6px 8px; border-radius:6px; display:none; z-index:10; }
 </style>
 </head>
@@ -225,7 +226,10 @@
   <form id="addForm" class="dlg">
     <h2 id="addTitle">Расход</h2>
     <label>Дата<input type="date" name="date" required></label>
-    <label>Сумма, RSD<input name="amount" type="number" min="0" step="1" inputmode="numeric" required></label>
+    <div style="display:grid; grid-template-columns:1fr 96px; gap:8px; align-items:end">
+      <label>Сумма<input name="amount" type="number" min="0" step="0.01" inputmode="decimal" required></label>
+      <label>Валюта<select name="currency"><option>RSD</option><option>EUR</option><option>RUB</option></select></label>
+    </div>
     <label id="catField">Категория<select name="category"></select></label>
     <label>Комментарий<input name="note" placeholder="необязательно"></label>
     <div class="dlg-buttons">
@@ -241,18 +245,29 @@ function startApp() {
   // Данные хранятся в приватном репозитории; сайт работает с ними через наш сервер (worker/),
   // который проверяет вход и держит токен GitHub у себя.
   const CUR = 'RSD';
-  const CATEGORIES = ['Обязательные платежи', 'Еда и быт', 'Дети', 'Транспорт', 'Кафе и развлечения', 'Одежда и здоровье', 'Отпуск и подарки'];
-  // старые статьи (Telegram, журналы с Диска) -> 7 категорий
+  const CATEGORIES = ['Аренда квартиры', 'Коммунальные и связь', 'Кредит и налоги', 'Еда и быт', 'Дети', 'Транспорт',
+    'Кафе и развлечения', 'Одежда и здоровье', 'Отпуск и подарки'];
+  // старые статьи (Telegram, журналы с Диска) -> новые категории
   const OLD = {
-    'Жильё': 0, 'Связь': 0, 'Кредит и налоги': 0,
-    'Продукты': 1, 'Быт': 1,
-    'Дети': 2,
-    'Транспорт': 3,
-    'Кафе': 4, 'Развлечения': 4, 'Алкоголь': 4,
-    'Одежда': 5, 'Здоровье': 5, 'Здоровье и уход': 5,
-    'Отпуск': 6, 'Подарки': 6, 'Прочее': 6
+    'Связь': 1, 'Кредит и налоги': 2,
+    'Продукты': 3, 'Быт': 3,
+    'Дети': 4,
+    'Транспорт': 5,
+    'Кафе': 6, 'Развлечения': 6, 'Алкоголь': 6,
+    'Одежда': 7, 'Здоровье': 7, 'Здоровье и уход': 7,
+    'Отпуск': 8, 'Подарки': 8, 'Прочее': 8
   };
-  const catOf = e => CATEGORIES.includes(e.category) ? e.category : CATEGORIES[OLD[e.category] ?? 6];
+  function catOf(e) {
+    if (CATEGORIES.includes(e.category)) return e.category;
+    // «Обязательные платежи» и «Жильё» раскладываем по комментарию
+    if (e.category === 'Обязательные платежи' || e.category === 'Жильё') {
+      const n = (e.note || '').toLowerCase();
+      if (/аренд|квартир/.test(n) || (!n.trim() && e.amount >= 60000)) return 'Аренда квартиры';
+      if (/кредит|налог|штраф|пошлин/.test(n)) return 'Кредит и налоги';
+      return 'Коммунальные и связь';
+    }
+    return CATEGORIES[OLD[e.category] ?? 8];
+  }
   const MONTHS = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
   const typeName = { expense: 'Расход', income: 'Доход', saving: 'Сбережения' };
   const $ = id => document.getElementById(id);
@@ -261,10 +276,13 @@ function startApp() {
   const fmt = (n, c = CUR) => Math.round(n).toLocaleString('ru-RU') + ' ' + c;
 
   // План по умолчанию — средние траты по категориям за 2025 год (журналы с Диска), округлено
-  const DEFAULT_PLAN = { 'Обязательные платежи': 108000, 'Еда и быт': 76000, 'Дети': 52000, 'Транспорт': 30000,
+  const DEFAULT_PLAN = { 'Аренда квартиры': 94000, 'Коммунальные и связь': 32000, 'Кредит и налоги': 15000, 'Еда и быт': 76000, 'Дети': 52000, 'Транспорт': 30000,
     'Кафе и развлечения': 43000, 'Одежда и здоровье': 10000, 'Отпуск и подарки': 66000 };
   const DEFAULTS = { savings: 13000, savingsCur: 'EUR', savingsDate: '2026-10', goal: 80000, goalCur: 'EUR', eurRate: 117.2, plan: DEFAULT_PLAN };
-  const COLOR = c => `var(--c${CATEGORIES.indexOf(c) + 1})`;
+  // цвет закреплён за категорией; серый — у самой «служебной» категории
+  const SLOT = { 'Аренда квартиры': 1, 'Коммунальные и связь': 2, 'Еда и быт': 3, 'Транспорт': 4, 'Дети': 5,
+    'Одежда и здоровье': 6, 'Кафе и развлечения': 7, 'Отпуск и подарки': 8, 'Кредит и налоги': 9 };
+  const COLOR = c => `var(--c${SLOT[c] || 9})`;
   let settings = Object.assign({}, DEFAULTS);
   let entries = [], history = [];
   // доходы и «сбережения» из старых журналов не учитываем: доходы вводятся помесячно на сайте
@@ -288,7 +306,12 @@ function startApp() {
   }
   async function saveEntries(request) {
     status('Сохраняю…');
-    try { entries = (await request()).entries; status('Сохранено'); setTimeout(() => status(''), 2000); }
+    try {
+      const d = await request();
+      if (d.entries) entries = d.entries;
+      if (d.history) history = d.history;
+      status('Сохранено'); setTimeout(() => status(''), 2000);
+    }
     catch (err) { status('Не сохранилось: ' + err.message, true); throw err; }
   }
   async function saveSettings(patch) {
@@ -451,7 +474,8 @@ function startApp() {
     $('rows').innerHTML = list.map(e => `<tr>
       <td>${e.date}</td><td>${typeName[e.type] || e.type}</td><td>${e.type === 'expense' ? esc(catOf(e)) : ''}</td>
       <td class="num ${e.type}">${fmt(e.amount, cur(e))}</td><td>${esc(e.note || '')}</td>
-      <td>${String(e.id).startsWith('web-') ? `<button class="ghost small" data-del="${esc(e.id)}" title="Удалить">✕</button>` : ''}</td></tr>`).join('');
+      <td class="row-actions"><button class="ghost small" data-edit-entry="${esc(e.id)}" title="Изменить">✎</button>
+        <button class="ghost small" data-del="${esc(e.id)}" title="Удалить">✕</button></td></tr>`).join('');
     $('empty').hidden = list.length > 0;
   }
 
@@ -505,13 +529,21 @@ function startApp() {
 
   const dlg = $('addDialog'), form = $('addForm');
   form.category.innerHTML = CATEGORIES.map(c => `<option>${c}</option>`).join('');
-  let addType = 'expense';
-  function openAdd(type) {
-    addType = type;
-    $('addTitle').textContent = type === 'income' ? 'Доход' : 'Расход';
-    $('catField').hidden = type !== 'expense';
+  let addType = 'expense', editing = null;
+  function openAdd(type, entry) {
+    addType = entry ? entry.type : type;
+    editing = entry || null;
+    $('addTitle').textContent = (entry ? 'Изменить: ' : '') + (addType === 'income' ? 'доход' : 'расход');
+    $('addTitle').textContent = $('addTitle').textContent[0].toUpperCase() + $('addTitle').textContent.slice(1);
+    $('catField').hidden = addType !== 'expense';
     form.reset();
-    form.date.value = today;
+    form.date.value = entry ? entry.date : today;
+    form.currency.value = entry ? cur(entry) : CUR;
+    if (entry) {
+      form.amount.value = entry.amount;
+      form.category.value = catOf(entry);
+      form.note.value = entry.note || '';
+    }
     dlg.showModal();
     form.amount.focus();
   }
@@ -521,11 +553,13 @@ function startApp() {
     const entry = {
       date: form.date.value, type: addType,
       category: addType === 'expense' ? form.category.value : '',
-      amount: parseFloat(form.amount.value), note: form.note.value.trim()
+      amount: parseFloat(form.amount.value), currency: form.currency.value, note: form.note.value.trim()
     };
     $('addSave').disabled = true;
     try {
-      await saveEntries(() => api('/entries', { method: 'POST', body: entry }));
+      await saveEntries(() => editing
+        ? api('/entries/' + encodeURIComponent(editing.id), { method: 'PUT', body: entry })
+        : api('/entries', { method: 'POST', body: entry }));
       dlg.close();
       month = entry.date.slice(0, 7);
       render();
@@ -533,7 +567,9 @@ function startApp() {
     $('addSave').disabled = false;
   });
   $('rows').addEventListener('click', async ev => {
-    const id = ev.target.dataset.del;
+    const btn = ev.target.closest('button'); if (!btn) return;
+    if (btn.dataset.editEntry) { openAdd(null, all().find(e => e.id === btn.dataset.editEntry)); return; }
+    const id = btn.dataset.del;
     if (!id || !confirm('Удалить запись?')) return;
     try { await saveEntries(() => api('/entries/' + encodeURIComponent(id), { method: 'DELETE' })); render(); } catch (e) {}
   });

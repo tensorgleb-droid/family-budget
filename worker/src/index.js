@@ -10,7 +10,9 @@
 // Переменные (wrangler.toml): DATA_REPO, DATA_BRANCH, ALLOWED_ORIGIN
 
 const FILES = { entries: 'data/expenses.json', history: 'data/history.json', settings: 'data/settings.json' };
-const CATEGORIES = ['Обязательные платежи', 'Еда и быт', 'Дети', 'Транспорт', 'Кафе и развлечения', 'Одежда и здоровье', 'Отпуск и подарки'];
+const CATEGORIES = ['Аренда квартиры', 'Коммунальные и связь', 'Кредит и налоги', 'Еда и быт', 'Дети', 'Транспорт',
+  'Кафе и развлечения', 'Одежда и здоровье', 'Отпуск и подарки'];
+const CURRENCIES = ['RSD', 'EUR', 'RUB'];
 const SESSION_DAYS = 30;
 const enc = new TextEncoder();
 
@@ -63,10 +65,25 @@ export default {
         return json({ entries });
       }
 
-      const del = url.pathname.match(/^\/entries\/(web-[\w-]+)$/);
-      if (del && request.method === 'DELETE') {
-        const entries = await gh.update(FILES.entries, [], list => list.filter(e => e.id !== del[1]), `Сайт (${user}): удалить запись`);
-        return json({ entries });
+      // правка и удаление любой записи: из Telegram (tg-*), с сайта (web-*) или старых журналов (drive-*)
+      const one = url.pathname.match(/^\/entries\/([\w-]+)$/);
+      if (one && (request.method === 'PUT' || request.method === 'DELETE')) {
+        const id = one[1];
+        const file = id.startsWith('drive-') ? 'history' : 'entries';
+        let change;
+        if (request.method === 'DELETE') change = list => list.filter(e => e.id !== id);
+        else {
+          const patch = validEntry(await request.json(), user);
+          if (!patch) return json({ error: 'Проверьте дату, сумму и категорию' }, 400);
+          change = list => {
+            if (!list.some(e => e.id === id)) throw new Error('Запись не найдена, обновите страницу');
+            // edited: true — бот не перезаписывает такие записи
+            return list.map(e => e.id === id ? { ...e, date: patch.date, type: patch.type, category: patch.category,
+              amount: patch.amount, currency: patch.currency, note: patch.note, edited: true, editedBy: user } : e);
+          };
+        }
+        const list = await gh.update(FILES[file], [], change, `Сайт (${user}): ${request.method === 'DELETE' ? 'удалить' : 'изменить'} запись ${id}`);
+        return json({ [file]: list });
       }
 
       if (url.pathname === '/settings' && request.method === 'PUT') {
@@ -161,7 +178,7 @@ function validEntry(e, user) {
     id: 'web-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     date: e.date, type: e.type,
     category: e.type === 'expense' ? e.category : '',
-    amount: Math.round(amount * 100) / 100, currency: 'RSD',
+    amount: Math.round(amount * 100) / 100, currency: CURRENCIES.includes(e.currency) ? e.currency : 'RSD',
     note: String(e.note || '').trim().slice(0, 200), who: user, source: 'web'
   };
 }
