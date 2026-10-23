@@ -84,7 +84,7 @@
     return keys.length ? keys.map(c => fmt(by[c], c)).join(' · ') : fmt(0);
   };
   const typeName = { expense: 'Расход', income: 'Доход', saving: 'Накопления' };
-  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; } };
   const save = list => localStorage.setItem(KEY, JSON.stringify(list));
   let entries = load();
 
@@ -153,7 +153,7 @@
       const ids = new Set(entries.map(e => e.id));
       entries = entries.concat(data.filter(e => !ids.has(e.id)));
       save(entries); render();
-    } catch { alert('Не удалось прочитать файл'); }
+    } catch (e) { alert('Не удалось прочитать файл'); }
     ev.target.value = '';
   });
   $('logout').addEventListener('click', () => { sessionStorage.removeItem('family-budget:session'); location.reload(); });

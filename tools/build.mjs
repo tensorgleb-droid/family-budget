@@ -20,7 +20,7 @@ async function askUsers() {
   while (true) {
     const login = (await rl.question('Логин: ')).trim();
     if (!login) break;
-    const password = await rl.question('Пароль: ');
+    const password = (await rl.question('Пароль: ')).trim();
     users.push([login, password]);
   }
   rl.close();
@@ -28,7 +28,7 @@ async function askUsers() {
 }
 
 const users = process.env.BUDGET_USERS
-  ? process.env.BUDGET_USERS.split(',').map(p => { const i = p.indexOf(':'); return [p.slice(0, i).trim(), p.slice(i + 1)]; })
+  ? process.env.BUDGET_USERS.split(',').map(p => { const i = p.indexOf(':'); return [p.slice(0, i).trim(), p.slice(i + 1).trim()]; })
   : await askUsers();
 if (!users.length) { console.error('Нужен хотя бы один пользователь'); process.exit(1); }
 for (const [l, p] of users) if (!l || p.length < 10) { console.error(`Пароль для «${l}» должен быть не короче 10 символов`); process.exit(1); }

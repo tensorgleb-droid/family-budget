@@ -9,6 +9,7 @@
   :root { --bg:#f5f6f8; --panel:#fff; --text:#1d2330; --muted:#6b7280; --line:#e5e7eb; --accent:#2f6fed; --red:#d14343; --green:#1f9d55; }
   @media (prefers-color-scheme: dark) { :root { --bg:#14171c; --panel:#1d2128; --text:#e8eaee; --muted:#9aa3af; --line:#2c323b; --accent:#5b8cff; --red:#ff6b6b; --green:#3ecf7a; } }
   * { box-sizing: border-box; }
+  [hidden] { display:none !important; }
   body { margin:0; font:15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); }
   button, input, select { font:inherit; color:inherit; }
   input, select { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); }
@@ -51,11 +52,12 @@
 </head>
 <body>
 <div id="login">
-  <form id="loginForm" autocomplete="on">
+  <form id="loginForm" autocomplete="on" onsubmit="return false">
     <h1>Семейный бюджет</h1>
     <p class="muted" style="margin:0">Вход только для своих</p>
-    <input name="username" placeholder="Логин" autocomplete="username" required>
-    <input name="password" type="password" placeholder="Пароль" autocomplete="current-password" required>
+    <input name="username" placeholder="Логин" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+    <input name="password" type="password" placeholder="Пароль" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" required>
+    <label class="muted" style="font-size:14px;display:flex;gap:6px;align-items:center"><input type="checkbox" id="showpw" style="width:auto"> Показать пароль</label>
     <button type="submit" id="btn">Войти</button>
     <p id="err"></p>
   </form>
@@ -93,22 +95,28 @@ function show(html, user) {
   app.hidden = false;
 }
 
+document.getElementById('showpw').addEventListener('change', ev => {
+  document.querySelector('[name=password]').type = ev.target.checked ? 'text' : 'password';
+});
+if (!window.crypto || !crypto.subtle) {
+  document.getElementById('err').textContent = 'Браузер не поддерживает шифрование. Откройте сайт по https:// в свежем Chrome/Safari/Firefox.';
+}
 document.getElementById('loginForm').addEventListener('submit', async ev => {
   ev.preventDefault();
   const f = ev.target, btn = document.getElementById('btn'), err = document.getElementById('err');
   err.textContent = ''; btn.disabled = true; btn.textContent = 'Проверяю…';
   try {
-    const kek = await kekFrom(f.username.value, f.password.value);
+    const kek = await kekFrom(f.username.value, f.password.value.trim());
     let raw = null;
     for (const slot of VAULT.slots) {
-      try { raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(slot.iv) }, kek, b64(slot.key)); break; } catch {}
+      try { raw = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64(slot.iv) }, kek, b64(slot.key)); break; } catch (e) {}
     }
     if (!raw) throw new Error('bad');
     const html = await openWithRaw(raw);
     const user = f.username.value.trim();
     sessionStorage.setItem(SESSION, JSON.stringify({ v: VAULT.version, k: ub64(raw), u: user }));
     show(html, user);
-  } catch {
+  } catch (e) {
     err.textContent = 'Неверный логин или пароль';
   } finally { btn.disabled = false; btn.textContent = 'Войти'; }
 });
@@ -118,7 +126,7 @@ document.getElementById('loginForm').addEventListener('submit', async ev => {
   try {
     const s = JSON.parse(sessionStorage.getItem(SESSION));
     if (s && s.v === VAULT.version) show(await openWithRaw(b64(s.k)), s.u);
-  } catch { sessionStorage.removeItem(SESSION); }
+  } catch (e) { sessionStorage.removeItem(SESSION); }
 })();
 </script>
 </body>
