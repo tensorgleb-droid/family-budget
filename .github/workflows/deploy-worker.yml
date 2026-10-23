@@ -34,7 +34,7 @@ jobs:
         env:
           DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
           BUDGET_USERS: ${{ secrets.BUDGET_USERS }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN || 'none' }}  # пока секрета нет, cron просто ничего не делает
 
       - name: Save API address for the site
         env:

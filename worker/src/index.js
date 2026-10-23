@@ -84,7 +84,7 @@ export default {
 
 // ---------- пробуждение Telegram-бота ----------
 async function wakeBot(env) {
-  if (!env.TELEGRAM_BOT_TOKEN) return;
+  if (!env.TELEGRAM_BOT_TOKEN || env.TELEGRAM_BOT_TOKEN === 'none') return;
   const allowed = encodeURIComponent(JSON.stringify(['channel_post', 'edited_channel_post']));
   const tg = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getUpdates?limit=1&timeout=0&allowed_updates=${allowed}`);
   const updates = await tg.json().catch(() => ({}));
