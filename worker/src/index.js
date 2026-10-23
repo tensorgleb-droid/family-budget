@@ -5,6 +5,8 @@
 // Секреты (задаются из GitHub Actions, см. .github/workflows/deploy-worker.yml):
 //   DATA_REPO_TOKEN — fine-grained токен, только репо family-budget-data, Contents: read/write
 //   BUDGET_USERS    — «логин:пароль,логин:пароль»
+//   TELEGRAM_BOT_TOKEN — токен бота; нужен только для пробуждения бота (cron ниже), можно не задавать
+// Для cron у DATA_REPO_TOKEN должно быть ещё право Actions: Read and write.
 // Переменные (wrangler.toml): DATA_REPO, DATA_BRANCH, ALLOWED_ORIGIN
 
 const FILES = { entries: 'data/expenses.json', history: 'data/history.json', settings: 'data/settings.json' };
@@ -13,6 +15,12 @@ const SESSION_DAYS = 30;
 const enc = new TextEncoder();
 
 export default {
+  // Раз в 5 минут смотрим, есть ли у бота новые сообщения, и только тогда запускаем poll.yml.
+  // getUpdates без offset ничего не подтверждает: сообщения забирает сам poll.py.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(wakeBot(env));
+  },
+
   async fetch(request, env) {
     const cors = {
       'Access-Control-Allow-Origin': env.ALLOWED_ORIGIN,
@@ -74,6 +82,33 @@ export default {
   }
 };
 
+// ---------- пробуждение Telegram-бота ----------
+async function wakeBot(env) {
+  if (!env.TELEGRAM_BOT_TOKEN) return;
+  const allowed = encodeURIComponent(JSON.stringify(['channel_post', 'edited_channel_post']));
+  const tg = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getUpdates?limit=1&timeout=0&allowed_updates=${allowed}`);
+  const updates = await tg.json().catch(() => ({}));
+  if (!updates.ok || !updates.result || !updates.result.length) return;
+
+  const headers = {
+    Authorization: `Bearer ${env.DATA_REPO_TOKEN}`,
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'family-budget-api',
+    'X-GitHub-Api-Version': '2022-11-28'
+  };
+  const runs = `https://api.github.com/repos/${env.DATA_REPO}/actions/workflows/poll.yml`;
+  // не запускаем второй раз, пока предыдущий запуск ещё идёт
+  for (const status of ['queued', 'in_progress']) {
+    const res = await fetch(`${runs}/runs?status=${status}&per_page=1`, { headers });
+    if (res.ok && (await res.json()).total_count > 0) return;
+  }
+  const res = await fetch(`${runs}/dispatches`, {
+    method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref: env.DATA_BRANCH })
+  });
+  if (!res.ok) console.log('Не удалось запустить poll.yml:', res.status, await res.text());
+}
+
 // ---------- вход ----------
 function users(env) {
   const map = new Map();
@@ -132,10 +167,16 @@ function validEntry(e, user) {
 }
 function validSettings(s) {
   const out = {};
-  for (const k of ['savings', 'goal', 'income']) {
-    if (k in s) { const n = Number(s[k]); if (Number.isFinite(n) && n >= 0) out[k] = n; }
-    const c = s[k + 'Cur'];
-    if (typeof c === 'string' && /^[A-Z]{3}$/.test(c)) out[k + 'Cur'] = c;
+  const num = (v, min, max) => { const n = Number(v); return Number.isFinite(n) && n >= min && n <= max ? n : undefined; };
+  for (const k of ['savings', 'goal']) {
+    if (num(s[k], 0, 1e12) !== undefined) out[k] = num(s[k], 0, 1e12);
+    if (['EUR', 'RSD'].includes(s[k + 'Cur'])) out[k + 'Cur'] = s[k + 'Cur'];
+  }
+  if (/^\d{4}-\d{2}$/.test(s.savingsDate || '')) out.savingsDate = s.savingsDate;
+  if (num(s.eurRate, 1, 1000) !== undefined) out.eurRate = num(s.eurRate, 1, 1000);
+  if (s.plan && typeof s.plan === 'object') {
+    out.plan = {};
+    for (const c of CATEGORIES) if (num(s.plan[c], 0, 1e9) !== undefined) out.plan[c] = num(s.plan[c], 0, 1e9);
   }
   return out;
 }

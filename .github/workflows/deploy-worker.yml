@@ -1,6 +1,6 @@
 # Выкладывает сервер (worker/) на Cloudflare и записывает его адрес в api.json для сайта.
 # Нужные секреты репозитория (Settings → Secrets and variables → Actions):
-#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, DATA_REPO_TOKEN, BUDGET_USERS
+#   CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID, DATA_REPO_TOKEN, BUDGET_USERS, TELEGRAM_BOT_TOKEN
 name: Deploy API
 
 on:
@@ -30,9 +30,11 @@ jobs:
           secrets: |
             DATA_REPO_TOKEN
             BUDGET_USERS
+            TELEGRAM_BOT_TOKEN
         env:
           DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
           BUDGET_USERS: ${{ secrets.BUDGET_USERS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
 
       - name: Save API address for the site
         env:

@@ -7,6 +7,9 @@
 <title>Семейный бюджет</title>
 <style>
   :root { --bg:#f5f6f8; --panel:#fff; --text:#1d2330; --muted:#6b7280; --line:#e5e7eb; --accent:#2f6fed; --red:#d14343; --green:#1f9d55; }
+  /* цвета 7 категорий: цвет закреплён за категорией, не за местом в рейтинге */
+  :root { --c1:#2a78d6; --c2:#eb6834; --c3:#1baf7a; --c4:#eda100; --c5:#e87ba4; --c6:#008300; --c7:#6250d6; --warn:#b26b00; }
+  @media (prefers-color-scheme: dark) { :root { --c1:#3987e5; --c2:#d95926; --c3:#199e70; --c4:#c98500; --c5:#d55181; --c6:#008300; --c7:#9085e9; --warn:#e0a030; } }
   @media (prefers-color-scheme: dark) { :root { --bg:#14171c; --panel:#1d2128; --text:#e8eaee; --muted:#9aa3af; --line:#2c323b; --accent:#5b8cff; --red:#ff6b6b; --green:#3ecf7a; } }
   * { box-sizing: border-box; }
   [hidden] { display:none !important; }
@@ -28,7 +31,7 @@
   .top-right { display:flex; gap:12px; align-items:center; }
   main { max-width:1000px; margin:0 auto; padding:20px 16px 40px; display:grid; gap:16px; }
   .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px; }
-  main > *, .grid > * { min-width:0; }
+  main > *, .grid > *, main > div > * { min-width:0; }
   .card, .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
   .card .label { color:var(--muted); font-size:13px; }
   .card .value { font-size:22px; font-weight:600; margin-top:4px; }
@@ -59,7 +62,7 @@
   .kpi .value { font-size:20px; }
   .tag { display:inline-block; font-size:11px; font-weight:400; color:var(--muted); border:1px solid var(--line); border-radius:4px; padding:0 4px; margin-left:6px; vertical-align:middle; }
   .bars { display:grid; gap:8px; }
-  .bar { display:grid; grid-template-columns:minmax(90px, 150px) 1fr 132px; gap:10px; align-items:center; font-size:14px; }
+  .bar { display:grid; grid-template-columns:minmax(120px, 190px) 1fr 132px; gap:10px; align-items:center; font-size:14px; }
   .bar .track { height:12px; background:var(--bg); border-radius:0 4px 4px 0; } .bar .track i { display:block; height:100%; background:var(--accent); border-radius:0 4px 4px 0; min-width:2px; }
   .bar b { font-weight:500; white-space:nowrap; text-align:right; } .bar b small { color:var(--muted); font-weight:400; margin-left:6px; display:inline-block; min-width:30px; text-align:right; }
   .cols { display:flex; align-items:flex-end; gap:8px; height:180px; }
@@ -80,6 +83,26 @@
   .dlg-buttons { display:flex; justify-content:flex-end; gap:8px; margin-top:4px; }
   .chips + .chips { margin-top:-8px; }
   .chip:disabled { opacity:.4; cursor:default; }
+  .dot { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:8px; vertical-align:baseline; flex:none; }
+  .bar > span { display:flex; align-items:center; }
+  .donut-wrap { display:grid; grid-template-columns:minmax(220px, 320px) 1fr; gap:24px; align-items:center; }
+  .donut svg { width:100%; height:auto; display:block; }
+  .donut path { cursor:default; transition:opacity .15s; }
+  .donut:hover path { opacity:.55; } .donut path:hover { opacity:1; }
+  .legend { display:grid; gap:10px; font-size:14px; }
+  .legend div { display:grid; grid-template-columns:auto 1fr auto auto; gap:10px; align-items:center; }
+  .legend b { font-weight:500; text-align:right; white-space:nowrap; } .legend small { color:var(--muted); min-width:34px; text-align:right; }
+  @media (max-width:640px) { .donut-wrap { grid-template-columns:1fr; } .donut { max-width:280px; margin:0 auto; width:100%; } }
+  .card .link { background:none; border:0; padding:0; color:var(--accent); font-size:13px; text-decoration:underline; text-underline-offset:2px; }
+  .plan { width:100%; border-collapse:collapse; display:table; }
+  .plan td, .plan th { white-space:normal; vertical-align:middle; }
+  .plan input { width:120px; text-align:right; padding:6px 8px; }
+  .plan .meter { height:10px; background:var(--bg); border-radius:5px; overflow:hidden; min-width:80px; }
+  .plan .meter i { display:block; height:100%; border-radius:5px; }
+  .plan tfoot td { font-weight:600; border-bottom:0; }
+  .over { color:var(--red); } .near { color:var(--warn); }
+  .plan-actions { display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+  @media (max-width:640px) { .plan .hide-sm { display:none; } .plan input { width:84px; } .plan td, .plan th { padding:8px 4px; font-size:13px; } .plan .meter { min-width:44px; } }
   #tip { position:fixed; pointer-events:none; background:var(--text); color:var(--panel); font-size:13px; padding:6px 8px; border-radius:6px; display:none; z-index:10; }
 </style>
 </head>
@@ -100,6 +123,7 @@
   <h1>Семейный бюджет</h1>
   <nav class="tabs">
     <button class="tab on" data-view="overview">Обзор</button>
+    <button class="tab" data-view="plan">План</button>
     <button class="tab" data-view="entries">Записи</button>
   </nav>
   <div class="top-right">
@@ -124,10 +148,9 @@
       <div class="sub" id="goalSub"></div>
     </div>
     <div class="card">
-      <button class="edit" data-edit="income" title="Изменить">✎</button>
-      <div class="label">Доход в месяц</div>
-      <div class="value" id="income">—</div>
-      <div class="sub">по плану</div>
+      <div class="label">Когда достигнем цели</div>
+      <div class="value" id="eta">—</div>
+      <div class="sub" id="etaSub"></div>
     </div>
   </section>
 
@@ -159,6 +182,29 @@
         <div class="cols" id="trend"></div>
       </section>
     </div>
+    <section class="panel" id="donutPanel">
+      <h2>Распределение по категориям</h2>
+      <div class="donut-wrap">
+        <div class="donut" id="donut"></div>
+        <div class="legend" id="legend"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- План -->
+  <div id="view-plan" style="display:none; gap:16px">
+    <section class="panel">
+      <h2 id="planTitle">План и факт</h2>
+      <div style="overflow-x:auto"><table class="plan">
+        <thead><tr><th>Категория</th><th class="num">План, RSD</th><th class="num">Факт</th><th>Исполнение</th><th class="num hide-sm">Остаток</th></tr></thead>
+        <tbody id="planRows"></tbody>
+        <tfoot id="planTotal"></tfoot>
+      </table></div>
+      <div class="plan-actions">
+        <button id="planSave">Сохранить план</button>
+        <span class="muted" style="font-size:13px">План один на каждый месяц. Факт считается за выбранный месяц.</span>
+      </div>
+    </section>
   </div>
 
   <!-- Записи -->
@@ -214,10 +260,20 @@ function startApp() {
   const cur = e => e.currency || CUR;
   const fmt = (n, c = CUR) => Math.round(n).toLocaleString('ru-RU') + ' ' + c;
 
-  const DEFAULTS = { savings: null, savingsCur: 'EUR', goal: 80000, goalCur: 'EUR', income: 528000, incomeCur: 'RSD' };
+  // План по умолчанию — средние траты по категориям за 2025 год (журналы с Диска), округлено
+  const DEFAULT_PLAN = { 'Обязательные платежи': 108000, 'Еда и быт': 76000, 'Дети': 52000, 'Транспорт': 30000,
+    'Кафе и развлечения': 43000, 'Одежда и здоровье': 10000, 'Отпуск и подарки': 66000 };
+  const DEFAULTS = { savings: 13000, savingsCur: 'EUR', savingsDate: '2026-10', goal: 80000, goalCur: 'EUR', eurRate: 117.2, plan: DEFAULT_PLAN };
+  const COLOR = c => `var(--c${CATEGORIES.indexOf(c) + 1})`;
   let settings = Object.assign({}, DEFAULTS);
   let entries = [], history = [];
-  const all = () => history.concat(entries);
+  // доходы и «сбережения» из старых журналов не учитываем: доходы вводятся помесячно на сайте
+  const all = () => history.filter(e => e.type === 'expense').concat(entries);
+  // всё считаем в динарах; евро — по курсу из настроек, остальные валюты в итоги не попадают
+  const toRSD = (n, c) => c === 'RSD' ? n : c === 'EUR' ? n * settings.eurRate : null;
+  const sumRSD = list => list.reduce((s, e) => s + (toRSD(e.amount, cur(e)) || 0), 0);
+  const ofMonth = (m, type) => all().filter(e => e.type === type && e.date.startsWith(m));
+  const hasIncome = m => ofMonth(m, 'income').length > 0;
 
   const status = (t, isErr) => { $('status').textContent = t; $('status').style.color = isErr ? 'var(--red)' : ''; };
 
@@ -226,6 +282,7 @@ function startApp() {
     try {
       const d = await api('/data');
       entries = d.entries; history = d.history; settings = Object.assign({}, DEFAULTS, d.settings);
+      settings.plan = Object.assign({}, DEFAULT_PLAN, settings.plan);
       status('');
     } catch (err) { status('Не удалось загрузить данные: ' + err.message, true); }
   }
@@ -236,8 +293,11 @@ function startApp() {
   }
   async function saveSettings(patch) {
     settings = Object.assign({}, settings, patch);
-    try { settings = Object.assign({}, DEFAULTS, (await api('/settings', { method: 'PUT', body: patch })).settings); }
-    catch (err) { status('Не сохранилось: ' + err.message, true); }
+    try {
+      settings = Object.assign({}, DEFAULTS, (await api('/settings', { method: 'PUT', body: patch })).settings);
+      settings.plan = Object.assign({}, DEFAULT_PLAN, settings.plan);
+      status('Сохранено'); setTimeout(() => status(''), 2000);
+    } catch (err) { status('Не сохранилось: ' + err.message, true); }
   }
 
   // ---------- состояние экрана ----------
@@ -254,17 +314,44 @@ function startApp() {
     return Object.keys(n).sort((a, b) => n[b] - n[a])[0] || CUR;
   }
 
+  // Сбережения сейчас = введённая сумма + (доходы − расходы) за следующие месяцы, где введён доход.
+  function savingsNow() {
+    let total = toRSD(settings.savings || 0, settings.savingsCur) || 0, months = 0;
+    monthsWithData().filter(m => m > settings.savingsDate && hasIncome(m)).forEach(m => {
+      total += sumRSD(ofMonth(m, 'income')) - sumRSD(ofMonth(m, 'expense')); months++;
+    });
+    return { total, months };
+  }
+  // текущая норма: последние 3 месяца, где введён доход
+  function savingPace() {
+    const ms = monthsWithData().filter(hasIncome).slice(-3);
+    const inc = ms.reduce((s, m) => s + sumRSD(ofMonth(m, 'income')), 0);
+    const exp = ms.reduce((s, m) => s + sumRSD(ofMonth(m, 'expense')), 0);
+    return ms.length ? { months: ms.length, perMonth: (inc - exp) / ms.length, rate: inc ? (inc - exp) / inc : 0 } : null;
+  }
+
   function renderTop() {
-    const s = settings;
-    $('savingsNow').textContent = s.savings == null ? '—' : fmt(s.savings, s.savingsCur);
-    $('savingsSub').textContent = s.savings == null ? 'нажмите ✎, чтобы указать' : 'на сегодня';
+    const s = settings, now = savingsNow();
+    const goalRSD = toRSD(s.goal, s.goalCur) || 0;
+    $('savingsNow').textContent = fmt(now.total);
+    $('savingsSub').innerHTML = `≈ ${fmt(now.total / s.eurRate, 'EUR')} · <button class="link" data-edit="eurRate">курс ${s.eurRate.toLocaleString('ru-RU')}</button>`
+      + (now.months ? `<br>с учётом ${now.months} мес. после ${monthLabel(s.savingsDate).toLowerCase()}` : '');
+    const pct = goalRSD > 0 ? Math.min(100, now.total / goalRSD * 100) : 0;
     $('goal').textContent = fmt(s.goal, s.goalCur);
-    const same = s.savings != null && s.savingsCur === s.goalCur && s.goal > 0;
-    const pct = same ? Math.min(100, s.savings / s.goal * 100) : 0;
     $('goalBar').style.width = pct + '%';
-    $('goalSub').textContent = s.savings == null ? 'первый взнос по ипотеке'
-      : same ? `накоплено ${Math.round(pct)}%, осталось ${fmt(Math.max(0, s.goal - s.savings), s.goalCur)}` : 'сбережения и цель в разных валютах';
-    $('income').textContent = fmt(s.income, s.incomeCur);
+    $('goalSub').textContent = `выполнено ${pct < 10 ? pct.toFixed(1).replace('.', ',') : Math.round(pct)}%, осталось ${fmt(Math.max(0, goalRSD - now.total))}`;
+
+    const pace = savingPace(), left = goalRSD - now.total;
+    if (left <= 0) { $('eta').textContent = 'Цель достигнута'; $('etaSub').textContent = ''; }
+    else if (!pace) { $('eta').textContent = '—'; $('etaSub').textContent = 'введите доход за месяц, и прогноз посчитается'; }
+    else if (pace.perMonth <= 0) { $('eta').textContent = 'Не достигнем'; $('etaSub').textContent = `расходы съедают весь доход (норма ${Math.round(pace.rate * 100)}%)`; }
+    else {
+      const n = Math.ceil(left / pace.perMonth), d = new Date();
+      d.setDate(1); d.setMonth(d.getMonth() + n);
+      $('eta').textContent = MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+      const y = Math.floor(n / 12), mo = n % 12;
+      $('etaSub').textContent = `через ${y ? y + ' г. ' : ''}${mo ? mo + ' мес.' : ''} при норме ${Math.round(pace.rate * 100)}% (≈ ${fmt(pace.perMonth)} в месяц)`;
+    }
   }
 
   function renderPicker() {
@@ -282,42 +369,80 @@ function startApp() {
   }
 
   function renderOverview() {
-    const c = monthCurrency(month);
-    const list = all().filter(e => e.date.startsWith(month) && cur(e) === c);
-    const sum = t => list.filter(e => e.type === t).reduce((s, e) => s + e.amount, 0);
-    const exp = sum('expense');
-    let inc = sum('income'), incPlan = false;
-    if (!inc && settings.incomeCur === c && month >= '2025-04') { inc = settings.income; incPlan = true; }
-    let sav = sum('saving'), savCalc = false;
-    if (!sav && inc) { sav = inc - exp; savCalc = true; }
-    $('kIncome').innerHTML = inc ? fmt(inc, c) + (incPlan ? '<span class="tag">план</span>' : '') : '—';
-    $('kExpense').textContent = fmt(exp, c);
-    $('kSaved').innerHTML = inc ? fmt(sav, c) + (savCalc ? '<span class="tag">доход − расходы</span>' : '') : '—';
-    $('kRate').textContent = inc ? Math.round(sav / inc * 100) + '%' : '—';
+    const exp = sumRSD(ofMonth(month, 'expense')), inc = sumRSD(ofMonth(month, 'income'));
+    const other = ofMonth(month, 'expense').some(e => toRSD(1, cur(e)) == null);
+    $('kIncome').innerHTML = inc ? fmt(inc) : '<button class="link" data-add="income">ввести доход</button>';
+    $('kExpense').innerHTML = fmt(exp) + (other ? '<span class="tag" title="Траты в рублях не пересчитываются">без RUB</span>' : '');
+    $('kSaved').textContent = inc ? fmt(inc - exp) : '—';
+    $('kRate').textContent = inc ? Math.round((inc - exp) / inc * 100) + '%' : '—';
 
     const cats = {}, counts = {};
-    list.filter(e => e.type === 'expense').forEach(e => {
-      const k = catOf(e);
-      cats[k] = (cats[k] || 0) + e.amount; counts[k] = (counts[k] || 0) + 1;
+    ofMonth(month, 'expense').forEach(e => {
+      const v = toRSD(e.amount, cur(e)); if (v == null) return;
+      const k = catOf(e); cats[k] = (cats[k] || 0) + v; counts[k] = (counts[k] || 0) + 1;
     });
     const rows = Object.entries(cats).sort((a, b) => b[1] - a[1]);
     const max = rows.length ? rows[0][1] : 1;
     const word = n => n % 10 === 1 && n % 100 !== 11 ? 'запись' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'записи' : 'записей';
     $('cats').innerHTML = rows.map(([k, v]) =>
-      `<div class="bar" data-tip="${esc(k)}: ${fmt(v, c)}, ${counts[k]} ${word(counts[k])}">
-        <span>${esc(k)}</span><div class="track"><i style="width:${v / max * 100}%"></i></div>
-        <b>${fmt(v, c)}<small>${Math.round(v / exp * 100)}%</small></b></div>`).join('');
+      `<div class="bar" data-tip="${esc(k)}: ${fmt(v)}, ${counts[k]} ${word(counts[k])}">
+        <span><i class="dot" style="background:${COLOR(k)}"></i>${esc(k)}</span><div class="track"><i style="width:${v / max * 100}%; background:${COLOR(k)}"></i></div>
+        <b>${fmt(v)}<small>${Math.round(v / exp * 100)}%</small></b></div>`).join('');
     $('catsEmpty').hidden = rows.length > 0;
+    renderDonut(rows, exp);
 
-    // столбики — последние месяцы в той же валюте, что и выбранный
-    const months = monthsWithData().filter(m => m <= month && monthCurrency(m) === c).slice(-8);
+    // столбики — последние 8 месяцев с данными до выбранного
+    const months = monthsWithData().filter(m => m <= month).slice(-8);
     if (!months.includes(month)) months.push(month);
-    const totals = months.map(m => all().filter(e => e.type === 'expense' && cur(e) === c && e.date.startsWith(m)).reduce((s, e) => s + e.amount, 0));
+    const totals = months.map(m => sumRSD(ofMonth(m, 'expense')));
     const tmax = Math.max(1, ...totals);
-    $('trendTitle').textContent = 'Расходы по месяцам, ' + c;
+    $('trendTitle').textContent = 'Расходы по месяцам, RSD';
     $('trend').innerHTML = months.map((m, i) =>
-      `<button class="col ${m === month ? 'on' : ''}" data-month="${m}" data-tip="${monthLabel(m)}: ${fmt(totals[i], c)}">
+      `<button class="col ${m === month ? 'on' : ''}" data-month="${m}" data-tip="${monthLabel(m)}: ${fmt(totals[i])}">
         <i style="height:calc(${totals[i] / tmax} * (100% - 36px))"></i><span>${MONTHS[+m.slice(5, 7) - 1].slice(0, 3)}<br>’${m.slice(2, 4)}</span></button>`).join('');
+  }
+
+  function renderDonut(rows, total) {
+    $('donutPanel').hidden = !rows.length;
+    if (!rows.length) return;
+    const R = 100, r0 = 62, cx = 110, cy = 110;
+    const pt = (a, rad) => [cx + rad * Math.sin(a), cy - rad * Math.cos(a)];
+    let a0 = 0;
+    const paths = rows.map(([k, v]) => {
+      const a1 = a0 + v / total * Math.PI * 2, big = a1 - a0 > Math.PI ? 1 : 0;
+      const end = rows.length === 1 ? a1 - 0.0001 : a1;
+      const [x0, y0] = pt(a0, R), [x1, y1] = pt(end, R), [x2, y2] = pt(end, r0), [x3, y3] = pt(a0, r0);
+      const d = `M${x0},${y0} A${R},${R} 0 ${big} 1 ${x1},${y1} L${x2},${y2} A${r0},${r0} 0 ${big} 0 ${x3},${y3} Z`;
+      a0 = a1;
+      return `<path d="${d}" fill="${COLOR(k)}" stroke="var(--panel)" stroke-width="2" stroke-linejoin="round" data-tip="${esc(k)}: ${fmt(v)} (${Math.round(v / total * 100)}%)"></path>`;
+    }).join('');
+    $('donut').innerHTML = `<svg viewBox="0 0 220 220" role="img" aria-label="Распределение расходов по категориям">${paths}
+      <text x="110" y="104" text-anchor="middle" font-size="12" fill="var(--muted)">${monthLabel(month)}</text>
+      <text x="110" y="126" text-anchor="middle" font-size="17" font-weight="600" fill="var(--text)">${fmt(total)}</text></svg>`;
+    $('legend').innerHTML = rows.map(([k, v]) =>
+      `<div><i class="dot" style="background:${COLOR(k)}"></i><span>${esc(k)}</span><b>${fmt(v)}</b><small>${Math.round(v / total * 100)}%</small></div>`).join('');
+  }
+
+  function renderPlan() {
+    $('planTitle').textContent = 'План и факт: ' + monthLabel(month);
+    const fact = {};
+    ofMonth(month, 'expense').forEach(e => { const v = toRSD(e.amount, cur(e)); if (v != null) fact[catOf(e)] = (fact[catOf(e)] || 0) + v; });
+    let tp = 0, tf = 0;
+    const row = (name, plan, f, input) => {
+      const pct = plan > 0 ? f / plan * 100 : (f > 0 ? 100 : 0);
+      const cls = pct > 100 ? 'over' : pct >= 85 ? 'near' : '';
+      const color = pct > 100 ? 'var(--red)' : pct >= 85 ? 'var(--warn)' : 'var(--green)';
+      return `<tr><td>${name}</td><td class="num">${input}</td><td class="num">${fmt(f)}</td>
+        <td><div class="meter"><i style="width:${Math.min(100, pct)}%; background:${color}"></i></div>
+        <small class="${cls}">${Math.round(pct)}%${pct > 100 ? ' · перерасход' : ''}</small></td>
+        <td class="num hide-sm ${plan - f < 0 ? 'over' : ''}">${fmt(plan - f)}</td></tr>`;
+    };
+    $('planRows').innerHTML = CATEGORIES.map(c => {
+      const p = settings.plan[c] || 0, f = fact[c] || 0; tp += p; tf += f;
+      return row(`<i class="dot" style="background:${COLOR(c)}"></i>${c}`, p, f,
+        `<input type="number" min="0" step="1000" data-plan="${c}" value="${p}">`);
+    }).join('');
+    $('planTotal').innerHTML = row('Итого', tp, tf, fmt(tp));
   }
 
   function renderEntries() {
@@ -334,8 +459,9 @@ function startApp() {
     renderTop(); renderPicker();
     $('view-overview').style.display = view === 'overview' ? 'grid' : 'none';
     $('view-entries').style.display = view === 'entries' ? 'grid' : 'none';
+    $('view-plan').style.display = view === 'plan' ? 'grid' : 'none';
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.view === view));
-    view === 'overview' ? renderOverview() : renderEntries();
+    ({ overview: renderOverview, entries: renderEntries, plan: renderPlan })[view]();
   }
 
   // ---------- действия ----------
@@ -350,19 +476,31 @@ function startApp() {
     const m = ev.target.closest('[data-month]');
     if (m && !m.disabled) { month = m.dataset.month; render(); return; }
     const ed = ev.target.closest('[data-edit]');
-    if (ed) {
-      const k = ed.dataset.edit, ck = k + 'Cur';
-      const names = { savings: 'Сбережения сейчас', goal: 'Цель', income: 'Доход в месяц' };
-      const v = prompt(`${names[k]}, ${settings[ck]}. Другую валюту можно дописать через пробел: «12000 EUR»`, settings[k] == null ? '' : settings[k]);
-      if (v == null) return;
-      const c = (v.match(/[A-Za-z]{3}/) || [])[0];
-      const n = parseFloat(v.replace(/[A-Za-z\s]/g, '').replace(',', '.'));
-      if (isNaN(n)) return;
-      const patch = { [k]: n }; if (c) patch[ck] = c.toUpperCase();
-      saveSettings(patch).then(render); render(); return;
-    }
+    if (ed) { editSetting(ed.dataset.edit); return; }
     const add = ev.target.closest('[data-add]');
     if (add) openAdd(add.dataset.add);
+  });
+
+  function editSetting(k) {
+    const ask = {
+      savings: [`Сколько отложено сейчас? Можно в EUR или RSD, например «13000 EUR»`, `${settings.savings} ${settings.savingsCur}`],
+      goal: [`Цель накоплений, например «80000 EUR»`, `${settings.goal} ${settings.goalCur}`],
+      eurRate: [`Курс: сколько динаров в 1 евро`, settings.eurRate]
+    }[k];
+    const v = prompt(ask[0], ask[1]);
+    if (v == null) return;
+    const c = ((v.match(/[A-Za-z]{3}/) || [])[0] || '').toUpperCase();
+    const n = parseFloat(v.replace(/[A-Za-z\s]/g, '').replace(',', '.'));
+    if (isNaN(n) || n < 0) return;
+    const patch = k === 'eurRate' ? { eurRate: n }
+      : k === 'savings' ? { savings: n, savingsCur: c === 'RSD' ? 'RSD' : 'EUR', savingsDate: today.slice(0, 7) }
+      : { goal: n, goalCur: c === 'RSD' ? 'RSD' : 'EUR' };
+    saveSettings(patch).then(render); render();
+  }
+  $('planSave').addEventListener('click', () => {
+    const plan = {};
+    document.querySelectorAll('[data-plan]').forEach(i => { plan[i.dataset.plan] = Math.max(0, Number(i.value) || 0); });
+    saveSettings({ plan }).then(render);
   });
 
   const dlg = $('addDialog'), form = $('addForm');
