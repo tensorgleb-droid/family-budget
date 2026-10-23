@@ -26,15 +26,24 @@
         </select>
       </label>
       <label>Категория<input name="category" list="cats" placeholder="Продукты" required></label>
-      <label>Сумма, ₽<input name="amount" type="number" min="0" step="0.01" required></label>
+      <label>Сумма<input name="amount" type="number" min="0" step="0.01" required></label>
+      <label>Валюта
+        <select name="currency">
+          <option>RSD</option><option>EUR</option><option>RUB</option><option>USD</option>
+        </select>
+      </label>
+      <label>Кто<input name="who" list="whos" placeholder="Семья"></label>
       <label class="wide">Комментарий<input name="note" placeholder="необязательно"></label>
       <button type="submit">Добавить</button>
     </form>
     <datalist id="cats">
       <option>Продукты</option><option>Жильё</option><option>Транспорт</option>
       <option>Кафе</option><option>Здоровье</option><option>Одежда</option>
-      <option>Развлечения</option><option>Зарплата</option><option>Подушка безопасности</option>
+      <option>Развлечения</option><option>Связь</option><option>Кредит и налоги</option>
+      <option>Дети</option><option>Отпуск</option><option>Алкоголь</option><option>Быт</option>
+      <option>Подарки</option><option>Прочее</option><option>Зарплата</option><option>Подушка безопасности</option>
     </datalist>
+    <datalist id="whos"><option>Семья</option><option>Глеб</option><option>Ксюша</option><option>Дети</option></datalist>
   </section>
 
   <section class="panel">
@@ -44,7 +53,7 @@
     </div>
     <div id="byCat" class="bycat"></div>
     <table>
-      <thead><tr><th>Дата</th><th>Тип</th><th>Категория</th><th class="num">Сумма</th><th>Комментарий</th><th></th></tr></thead>
+      <thead><tr><th>Дата</th><th>Тип</th><th>Категория</th><th>Кто</th><th class="num">Сумма</th><th>Комментарий</th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <p id="empty" class="muted">Пока нет записей за этот месяц.</p>
@@ -64,7 +73,16 @@
 <script>
 (() => {
   const KEY = 'family-budget:entries';
-  const fmt = n => n.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
+  const DEFAULT_CUR = 'RSD';
+  const cur = e => e.currency || DEFAULT_CUR;
+  const fmt = (n, c = DEFAULT_CUR) => n.toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ' + c;
+  // суммы по валютам: { RSD: 1200, EUR: 30 } -> "1 200 RSD · 30 EUR"
+  const total = list => {
+    const by = {};
+    list.forEach(e => by[cur(e)] = (by[cur(e)] || 0) + e.amount);
+    const keys = Object.keys(by);
+    return keys.length ? keys.map(c => fmt(by[c], c)).join(' · ') : fmt(0);
+  };
   const typeName = { expense: 'Расход', income: 'Доход', saving: 'Накопления' };
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
   const save = list => localStorage.setItem(KEY, JSON.stringify(list));
@@ -79,22 +97,25 @@
   function render() {
     const m = $('month').value;
     const list = entries.filter(e => e.date.startsWith(m)).sort((a, b) => b.date.localeCompare(a.date));
-    const sum = t => list.filter(e => e.type === t).reduce((s, e) => s + e.amount, 0);
-    const inc = sum('income'), exp = sum('expense'), sav = sum('saving');
-    $('sumIncome').textContent = fmt(inc);
-    $('sumExpense').textContent = fmt(exp);
-    $('sumSaved').textContent = fmt(sav);
+    const of = t => list.filter(e => e.type === t);
+    $('sumIncome').textContent = total(of('income'));
+    $('sumExpense').textContent = total(of('expense'));
+    $('sumSaved').textContent = total(of('saving'));
+    // норма сбережений считается в основной валюте
+    const main = t => of(t).filter(e => cur(e) === DEFAULT_CUR).reduce((s, e) => s + e.amount, 0);
+    const inc = main('income'), sav = main('saving');
     $('rate').textContent = inc > 0 ? Math.round(sav / inc * 100) + '%' : '—';
 
+    // расходы по категориям в основной валюте
     const cats = {};
-    list.filter(e => e.type === 'expense').forEach(e => cats[e.category] = (cats[e.category] || 0) + e.amount);
+    of('expense').filter(e => cur(e) === DEFAULT_CUR).forEach(e => cats[e.category] = (cats[e.category] || 0) + e.amount);
     const max = Math.max(1, ...Object.values(cats));
     $('byCat').innerHTML = Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([c, v]) =>
       `<div class="bar"><span>${esc(c)}</span><div><i style="width:${v / max * 100}%"></i></div><b>${fmt(v)}</b></div>`).join('');
 
     $('rows').innerHTML = list.map(e => `<tr>
-      <td>${e.date}</td><td>${typeName[e.type]}</td><td>${esc(e.category)}</td>
-      <td class="num ${e.type}">${fmt(e.amount)}</td><td>${esc(e.note || '')}</td>
+      <td>${e.date}</td><td>${typeName[e.type]}</td><td>${esc(e.category)}</td><td>${esc(e.who || '')}</td>
+      <td class="num ${e.type}">${fmt(e.amount, cur(e))}</td><td>${esc(e.note || '')}</td>
       <td><button class="ghost small" data-del="${e.id}">✕</button></td></tr>`).join('');
     $('empty').hidden = list.length > 0;
   }
@@ -106,7 +127,8 @@
     entries.push({
       id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       date: f.date.value, type: f.type.value, category: f.category.value.trim(),
-      amount: parseFloat(f.amount.value), note: f.note.value.trim()
+      amount: parseFloat(f.amount.value), currency: f.currency.value,
+      who: f.who.value.trim() || 'Семья', note: f.note.value.trim()
     });
     save(entries);
     f.amount.value = ''; f.note.value = '';
