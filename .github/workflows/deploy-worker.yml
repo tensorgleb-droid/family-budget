@@ -47,3 +47,16 @@ jobs:
             git commit -m "Адрес API: $URL"
             git push
           fi
+
+      - name: Check login and data access
+        env:
+          URL: ${{ steps.deploy.outputs.deployment-url }}
+          BUDGET_USERS: ${{ secrets.BUDGET_USERS }}
+        run: |
+          sleep 5
+          first="${BUDGET_USERS%%,*}"
+          body=$(jq -n --arg l "${first%%:*}" --arg p "${first#*:}" '{login:$l, password:$p}')
+          token=$(curl -sf -X POST "${URL%/}/login" -H 'Content-Type: application/json' -d "$body" | jq -r .token)
+          test -n "$token" && test "$token" != null || { echo "Вход не прошёл"; exit 1; }
+          curl -sf "${URL%/}/data" -H "Authorization: Bearer $token" \
+            | jq -r '"Данные доступны: записей \(.entries|length), история \(.history|length), настройки \(.settings|keys|length) полей"'
