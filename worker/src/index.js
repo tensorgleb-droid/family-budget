@@ -10,7 +10,7 @@
 // Переменные (wrangler.toml): DATA_REPO, DATA_BRANCH, ALLOWED_ORIGIN
 
 const FILES = { entries: 'data/expenses.json', history: 'data/history.json', settings: 'data/settings.json' };
-const CATEGORIES = ['Аренда квартиры', 'Коммунальные и связь', 'Кредит и налоги', 'Еда и быт', 'Дети', 'Транспорт',
+const CATEGORIES = ['Аренда квартиры', 'Коммунальные и связь', 'Кредит и налоги', 'Еда и быт', 'Дети', 'Спорт и курсы', 'Транспорт',
   'Кафе и развлечения', 'Одежда и здоровье', 'Отпуск и подарки'];
 const CURRENCIES = ['RSD', 'EUR', 'RUB'];
 const SESSION_DAYS = 30;
