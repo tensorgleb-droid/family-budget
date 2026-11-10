@@ -8,8 +8,8 @@
 <style>
   :root { --bg:#f5f6f8; --panel:#fff; --text:#1d2330; --muted:#6b7280; --line:#e5e7eb; --accent:#2f6fed; --red:#d14343; --green:#1f9d55; }
   /* цвета 7 категорий: цвет закреплён за категорией, не за местом в рейтинге */
-  :root { --c1:#2a78d6; --c2:#eb6834; --c3:#1baf7a; --c4:#eda100; --c5:#e87ba4; --c6:#008300; --c7:#6250d6; --c8:#e34948; --c9:#8b8f97; --c10:#8c5a2b; --warn:#b26b00; }
-  @media (prefers-color-scheme: dark) { :root { --c1:#3987e5; --c2:#d95926; --c3:#199e70; --c4:#c98500; --c5:#d55181; --c6:#008300; --c7:#9085e9; --c8:#e66767; --c9:#9aa0a8; --c10:#b07a48; --warn:#e0a030; } }
+  :root { --c1:#2a78d6; --c2:#eb6834; --c3:#1baf7a; --c4:#eda100; --c5:#e87ba4; --c6:#008300; --c7:#6250d6; --c8:#e34948; --c9:#8b8f97; --c10:#8c5a2b; --csave:#0f766e; --warn:#b26b00; }
+  @media (prefers-color-scheme: dark) { :root { --c1:#3987e5; --c2:#d95926; --c3:#199e70; --c4:#c98500; --c5:#d55181; --c6:#008300; --c7:#9085e9; --c8:#e66767; --c9:#9aa0a8; --c10:#b07a48; --csave:#2fa69a; --warn:#e0a030; } }
   @media (prefers-color-scheme: dark) { :root { --bg:#14171c; --panel:#1d2128; --text:#e8eaee; --muted:#9aa3af; --line:#2c323b; --accent:#5b8cff; --red:#ff6b6b; --green:#3ecf7a; } }
   * { box-sizing: border-box; }
   [hidden] { display:none !important; }
@@ -90,6 +90,15 @@
   .donut path { cursor:default; transition:opacity .15s; }
   .donut:hover path { opacity:.55; } .donut path:hover { opacity:1; }
   .legend { display:grid; gap:10px; font-size:14px; }
+  .bar[data-cat], .legend [data-cat], .donut path[data-cat] { cursor:pointer; }
+  .bar[data-cat]:hover > span, .legend [data-cat]:hover span { text-decoration:underline; text-underline-offset:3px; }
+  .bar.open > span { font-weight:600; } .legend .open span { font-weight:600; }
+  .detail-head { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px; } .detail-head h2 { margin:0; }
+  .detail { display:grid; gap:2px; font-size:14px; max-height:420px; overflow-y:auto; }
+  .detail > div { display:grid; grid-template-columns:52px 1fr auto; gap:10px; padding:6px 0; border-bottom:1px solid var(--line); align-items:baseline; }
+  .detail time { color:var(--muted); font-size:13px; } .detail b { font-weight:500; white-space:nowrap; text-align:right; }
+  .detail .sum { font-weight:600; border-bottom:0; }
+  .detail > .detail-head { display:flex; border-bottom:0; padding:0 0 6px; }
   .legend div { display:grid; grid-template-columns:auto 1fr auto auto; gap:10px; align-items:center; }
   .legend b { font-weight:500; text-align:right; white-space:nowrap; } .legend small { color:var(--muted); min-width:34px; text-align:right; }
   @media (max-width:640px) { .donut-wrap { grid-template-columns:1fr; } .donut { max-width:280px; margin:0 auto; width:100%; } }
@@ -178,16 +187,23 @@
         <div class="bars" id="cats"></div>
         <p class="muted" id="catsEmpty" hidden>В этом месяце расходов нет.</p>
       </section>
-      <section class="panel">
+      <section class="panel" id="trendPanel">
         <h2 id="trendTitle">Расходы по месяцам</h2>
         <div class="cols" id="trend"></div>
+      </section>
+      <section class="panel" id="detailPanel" hidden>
+        <div class="detail-head"><h2 id="detailTitle"></h2><button class="ghost small" data-close-cat title="Закрыть">✕</button></div>
+        <div class="detail" id="detail"></div>
       </section>
     </div>
     <section class="panel" id="donutPanel">
       <h2>Распределение по категориям</h2>
       <div class="donut-wrap">
         <div class="donut" id="donut"></div>
-        <div class="legend" id="legend"></div>
+        <div>
+          <div class="legend" id="legend"></div>
+          <div class="detail" id="donutDetail" style="margin-top:16px"></div>
+        </div>
       </div>
     </section>
   </div>
@@ -327,6 +343,7 @@ function startApp() {
   const today = new Date().toISOString().slice(0, 10);
   let month = today.slice(0, 7);
   let view = 'overview';
+  let openCat = null;   // категория, траты которой показаны списком
   $('who').textContent = session.user;
   const monthsWithData = () => [...new Set(all().map(e => e.date.slice(0, 7)))].sort();
   const monthLabel = m => MONTHS[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4);
@@ -408,11 +425,13 @@ function startApp() {
     const max = rows.length ? rows[0][1] : 1;
     const word = n => n % 10 === 1 && n % 100 !== 11 ? 'запись' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'записи' : 'записей';
     $('cats').innerHTML = rows.map(([k, v]) =>
-      `<div class="bar" data-tip="${esc(k)}: ${fmt(v)}, ${counts[k]} ${word(counts[k])}">
+      `<div class="bar ${k === openCat ? 'open' : ''}" data-cat="${esc(k)}" data-tip="${esc(k)}: ${fmt(v)}, ${counts[k]} ${word(counts[k])} — нажмите, чтобы увидеть траты">
         <span><i class="dot" style="background:${COLOR(k)}"></i>${esc(k)}</span><div class="track"><i style="width:${v / max * 100}%; background:${COLOR(k)}"></i></div>
         <b>${fmt(v)}<small>${Math.round(v / exp * 100)}%</small></b></div>`).join('');
     $('catsEmpty').hidden = rows.length > 0;
-    renderDonut(rows, exp);
+    if (openCat && !cats[openCat]) openCat = null;
+    renderDonut(rows, exp, inc);
+    renderDetail();
 
     // столбики — последние 8 месяцев с данными до выбранного
     const months = monthsWithData().filter(m => m <= month).slice(-8);
@@ -425,25 +444,51 @@ function startApp() {
         <i style="height:calc(${totals[i] / tmax} * (100% - 36px))"></i><span>${MONTHS[+m.slice(5, 7) - 1].slice(0, 3)}<br>’${m.slice(2, 4)}</span></button>`).join('');
   }
 
-  function renderDonut(rows, total) {
+  // Круг: траты по категориям + «Сбережения» (доход − все расходы), если доход за месяц введён
+  function renderDonut(rows, exp, inc) {
     $('donutPanel').hidden = !rows.length;
     if (!rows.length) return;
+    const saved = inc - exp;
+    const slices = rows.map(([k, v]) => ({ k, v, color: COLOR(k), cat: true }));
+    if (inc > 0 && saved > 0) slices.push({ k: 'Сбережения', v: saved, color: 'var(--csave)', cat: false });
+    const total = inc > 0 && saved > 0 ? inc : exp;
     const R = 100, r0 = 62, cx = 110, cy = 110;
     const pt = (a, rad) => [cx + rad * Math.sin(a), cy - rad * Math.cos(a)];
     let a0 = 0;
-    const paths = rows.map(([k, v]) => {
+    const paths = slices.map(({ k, v, color, cat }) => {
       const a1 = a0 + v / total * Math.PI * 2, big = a1 - a0 > Math.PI ? 1 : 0;
-      const end = rows.length === 1 ? a1 - 0.0001 : a1;
+      const end = slices.length === 1 ? a1 - 0.0001 : a1;
       const [x0, y0] = pt(a0, R), [x1, y1] = pt(end, R), [x2, y2] = pt(end, r0), [x3, y3] = pt(a0, r0);
       const d = `M${x0},${y0} A${R},${R} 0 ${big} 1 ${x1},${y1} L${x2},${y2} A${r0},${r0} 0 ${big} 0 ${x3},${y3} Z`;
       a0 = a1;
-      return `<path d="${d}" fill="${COLOR(k)}" stroke="var(--panel)" stroke-width="2" stroke-linejoin="round" data-tip="${esc(k)}: ${fmt(v)} (${Math.round(v / total * 100)}%)"></path>`;
+      return `<path d="${d}" fill="${color}" stroke="var(--panel)" stroke-width="2" stroke-linejoin="round" ${cat ? `data-cat="${esc(k)}"` : ''}
+        data-tip="${esc(k)}: ${fmt(v)} (${Math.round(v / total * 100)}%)"></path>`;
     }).join('');
-    $('donut').innerHTML = `<svg viewBox="0 0 220 220" role="img" aria-label="Распределение расходов по категориям">${paths}
-      <text x="110" y="104" text-anchor="middle" font-size="12" fill="var(--muted)">${monthLabel(month)}</text>
+    const label = total === inc ? 'доход ' + monthLabel(month).toLowerCase() : monthLabel(month);
+    $('donut').innerHTML = `<svg viewBox="0 0 220 220" role="img" aria-label="Распределение дохода и расходов по категориям">${paths}
+      <text x="110" y="104" text-anchor="middle" font-size="12" fill="var(--muted)">${label}</text>
       <text x="110" y="126" text-anchor="middle" font-size="17" font-weight="600" fill="var(--text)">${fmt(total)}</text></svg>`;
-    $('legend').innerHTML = rows.map(([k, v]) =>
-      `<div><i class="dot" style="background:${COLOR(k)}"></i><span>${esc(k)}</span><b>${fmt(v)}</b><small>${Math.round(v / total * 100)}%</small></div>`).join('');
+    $('legend').innerHTML = slices.map(({ k, v, color, cat }) =>
+      `<div ${cat ? `data-cat="${esc(k)}"` : ''} class="${k === openCat ? 'open' : ''}"><i class="dot" style="background:${color}"></i><span>${esc(k)}</span><b>${fmt(v)}</b><small>${Math.round(v / total * 100)}%</small></div>`).join('')
+      + (inc > 0 && saved <= 0 ? `<p class="muted" style="margin:4px 0 0">Сбережений нет: расходы больше дохода на ${fmt(-saved)}.</p>` : '')
+      + (!inc ? `<p class="muted" style="margin:4px 0 0">Введите доход за месяц, чтобы увидеть долю сбережений.</p>` : '');
+  }
+
+  // список трат выбранной категории за месяц: рядом с «Куда ушли деньги» и под легендой круга
+  function renderDetail() {
+    $('detailPanel').hidden = !openCat;
+    $('trendPanel').hidden = !!openCat;
+    if (!openCat) { $('donutDetail').innerHTML = ''; return; }
+    const list = ofMonth(month, 'expense').filter(e => catOf(e) === openCat)
+      .sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount);
+    const total = list.reduce((s, e) => s + (toRSD(e.amount, cur(e)) || 0), 0);
+    $('detailTitle').innerHTML = `<i class="dot" style="background:${COLOR(openCat)}"></i>${esc(openCat)}`;
+    const html = list.map(e => `<div><time>${e.date.slice(8)}.${e.date.slice(5, 7)}</time>
+        <span>${esc(e.note || '—')}</span><b>${fmt(e.amount, cur(e))}</b></div>`).join('')
+      + `<div class="sum"><span></span><span>Итого, ${list.length} шт.</span><b>${fmt(total)}</b></div>`;
+    $('detail').innerHTML = html;
+    $('donutDetail').innerHTML = `<div class="detail-head"><h2 style="font-size:15px"><i class="dot" style="background:${COLOR(openCat)}"></i>${esc(openCat)}</h2>
+      <button class="ghost small" data-close-cat title="Закрыть">✕</button></div>` + html;
   }
 
   function renderPlan() {
@@ -494,11 +539,14 @@ function startApp() {
     const y = ev.target.closest('[data-year]');
     if (y) {
       const ms = monthsWithData().filter(m => m.startsWith(y.dataset.year));
-      month = ms.length ? ms[ms.length - 1] : `${y.dataset.year}-${today.slice(5, 7)}`;
+      month = ms.length ? ms[ms.length - 1] : `${y.dataset.year}-${today.slice(5, 7)}`; openCat = null;
       render(); return;
     }
     const m = ev.target.closest('[data-month]');
-    if (m && !m.disabled) { month = m.dataset.month; render(); return; }
+    if (m && !m.disabled) { month = m.dataset.month; openCat = null; render(); return; }
+    if (ev.target.closest('[data-close-cat]')) { openCat = null; render(); return; }
+    const cat = ev.target.closest('[data-cat]');
+    if (cat) { openCat = openCat === cat.dataset.cat ? null : cat.dataset.cat; render(); return; }
     const ed = ev.target.closest('[data-edit]');
     if (ed) { editSetting(ed.dataset.edit); return; }
     const add = ev.target.closest('[data-add]');
